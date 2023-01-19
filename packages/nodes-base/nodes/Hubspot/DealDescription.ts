@@ -70,12 +70,32 @@ export const dealFields: INodeProperties[] = [
 	/*                                deal:create                                 */
 	/* -------------------------------------------------------------------------- */
 	{
+		displayName: 'Pipeline Name or ID',
+		name: 'pipelineId',
+		type: 'options',
+		required: true,
+		typeOptions: {
+			loadOptionsMethod: 'getDealPipelines',
+		},
+		displayOptions: {
+			show: {
+				resource: ['deal'],
+				operation: ['create'],
+			},
+		},
+		default: '',
+		options: [],
+		description:
+			'The pipeline is required when creating a deal. See the CRM Pipelines API for details on managing pipelines and stages. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code-examples/expressions/">expression</a>.',
+	},
+	{
 		displayName: 'Deal Stage Name or ID',
 		name: 'stage',
 		type: 'options',
 		required: true,
 		typeOptions: {
 			loadOptionsMethod: 'getDealStages',
+			loadOptionsDependsOn: ['pipelineId'],
 		},
 		displayOptions: {
 			show: {
@@ -194,12 +214,6 @@ export const dealFields: INodeProperties[] = [
 				},
 				default: '',
 			},
-			{
-				displayName: 'Pipeline',
-				name: 'pipeline',
-				type: 'string',
-				default: '',
-			},
 		],
 	},
 
@@ -219,6 +233,43 @@ export const dealFields: INodeProperties[] = [
 		},
 		default: '',
 		description: 'Unique identifier for a particular deal',
+	},
+	{
+		displayName: 'Update Pipeline Name or ID',
+		name: 'pipelineId',
+		type: 'options',
+		typeOptions: {
+			loadOptionsMethod: 'getDealPipelines',
+		},
+		displayOptions: {
+			show: {
+				resource: ['deal'],
+				operation: ['update'],
+			},
+		},
+		default: '',
+		options: [],
+		description:
+			'The pipeline is required when creating a deal. See the CRM Pipelines API for details on managing pipelines and stages. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code-examples/expressions/">expression</a>.',
+	},
+	{
+		displayName: 'Update Deal Stage Name or ID',
+		name: 'stage',
+		type: 'options',
+		typeOptions: {
+			loadOptionsMethod: 'getDealStages',
+			loadOptionsDependsOn: ['pipelineId'],
+		},
+		displayOptions: {
+			show: {
+				resource: ['deal'],
+				operation: ['update'],
+			},
+		},
+		default: '',
+		options: [],
+		description:
+			'The dealstage is required when creating a deal. See the CRM Pipelines API for details on managing pipelines and stages. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code-examples/expressions/">expression</a>.',
 	},
 	{
 		displayName: 'Update Fields',
@@ -294,17 +345,6 @@ export const dealFields: INodeProperties[] = [
 				default: '',
 			},
 			{
-				displayName: 'Deal Stage Name or ID',
-				name: 'stage',
-				type: 'options',
-				typeOptions: {
-					loadOptionsMethod: 'getDealStages',
-				},
-				default: '',
-				description:
-					'The dealstage is required when creating a deal. See the CRM Pipelines API for details on managing pipelines and stages. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code-examples/expressions/">expression</a>.',
-			},
-			{
 				displayName: 'Deal Type Name or ID',
 				name: 'dealType',
 				type: 'options',
@@ -313,12 +353,6 @@ export const dealFields: INodeProperties[] = [
 				typeOptions: {
 					loadOptionsMethod: 'getDealTypes',
 				},
-				default: '',
-			},
-			{
-				displayName: 'Pipeline',
-				name: 'pipeline',
-				type: 'string',
 				default: '',
 			},
 		],

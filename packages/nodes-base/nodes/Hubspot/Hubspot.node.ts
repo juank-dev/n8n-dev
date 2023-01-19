@@ -46,16 +46,19 @@ import { IForm } from './FormInterface';
 import { IAssociation, IDeal } from './DealInterface';
 
 import { snakeCase } from 'change-case';
+import { productFields, productOperations } from './ProductDescription';
+import { lineItemsFields, lineItemsOperations } from './LineItemsDescription';
+import { associationFields, associationOperations } from './AssociationDescription';
 
 export class Hubspot implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'HubSpot',
+		displayName: 'HubSpot V2',
 		name: 'hubspot',
 		icon: 'file:hubspot.svg',
 		group: ['output'],
 		version: 1,
 		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
-		description: 'Consume HubSpot API',
+		description: 'Consume HubSpot API V2',
 		defaults: {
 			name: 'HubSpot',
 		},
@@ -120,6 +123,10 @@ export class Hubspot implements INodeType {
 				noDataExpression: true,
 				options: [
 					{
+						name: 'Association',
+						value: 'association',
+					},
+					{
 						name: 'Company',
 						value: 'company',
 					},
@@ -144,12 +151,23 @@ export class Hubspot implements INodeType {
 						value: 'form',
 					},
 					{
+						name: 'Line Item',
+						value: 'lineItems',
+					},
+					{
+						name: 'Product',
+						value: 'product',
+					},
+					{
 						name: 'Ticket',
 						value: 'ticket',
 					},
 				],
 				default: 'deal',
 			},
+			// ASSOCIATION
+			...associationOperations,
+			...associationFields,
 			// CONTACT
 			...contactOperations,
 			...contactFields,
@@ -168,6 +186,12 @@ export class Hubspot implements INodeType {
 			// FORM
 			...formOperations,
 			...formFields,
+			//LINE ITEMS
+			...lineItemsOperations,
+			...lineItemsFields,
+			//PRODUCTS
+			...productOperations,
+			...productFields,
 			// TICKET
 			...ticketOperations,
 			...ticketFields,
@@ -595,19 +619,36 @@ export class Hubspot implements INodeType {
 
 			// Get all the groups to display them to user so that he can
 			// select them easily
-			async getDealStages(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+			async getDealPipelines(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
 				const returnData: INodePropertyOptions[] = [];
-				const endpoint = '/crm-pipelines/v1/pipelines/deals';
-				let stages = await hubspotApiRequest.call(this, 'GET', endpoint, {});
-				stages = stages.results[0].stages;
-				for (const stage of stages) {
-					const stageName = stage.label;
-					const stageId = stage.stageId;
+				const endpoint = '/crm/v3/pipelines/deals';
+				const stages = await hubspotApiRequest.call(this, 'GET', endpoint, {});
+				for (const pipeline of stages.results) {
+					const pipelineName = pipeline.label;
+					const pipelineId = pipeline.id;
 					returnData.push({
-						name: stageName,
-						value: stageId,
+						name: pipelineName,
+						value: pipelineId,
 					});
 				}
+				return returnData;
+			},
+			// Get all the groups to display them to user so that he can
+			// select them easily
+			async getDealStages(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+				let currentPipelineId = this.getCurrentNodeParameter('pipelineId') as string;
+				if (currentPipelineId === undefined) {
+					currentPipelineId = this.getNodeParameter('updateFields.pipelineId', '') as string;
+				}
+				const endpoint = `/crm/v3/pipelines/deals/${currentPipelineId}/stages`;
+				const { results } = await hubspotApiRequest.call(this, 'GET', endpoint, {});
+				const returnData: INodePropertyOptions[] = results.map((stage: any) => {
+					return {
+						name: stage.label,
+						value: stage.id,
+					};
+				});
+
 				return returnData;
 			},
 
@@ -840,10 +881,10 @@ export class Hubspot implements INodeType {
 				const endpoint = '/crm-pipelines/v1/pipelines/tickets';
 				const { results } = await hubspotApiRequest.call(this, 'GET', endpoint, {});
 				for (const pipeline of results) {
-					if (currentPipelineId === pipeline.pipelineId) {
+					if (currentPipelineId === pipeline.id) {
 						for (const stage of pipeline.stages) {
 							const stageName = stage.label;
-							const stageId = stage.stageId;
+							const stageId = stage.id;
 							returnData.push({
 								name: stageName,
 								value: stageId,
@@ -2023,10 +2064,15 @@ export class Hubspot implements INodeType {
 							const association: IAssociation = {};
 							const additionalFields = this.getNodeParameter('additionalFields', i);
 							const stage = this.getNodeParameter('stage', i) as string;
-							if (stage) {
+							const pipelineId = this.getNodeParameter('pipelineId', i) as string;
+							if (pipelineId && stage) {
 								body.properties.push({
 									name: 'dealstage',
 									value: stage,
+								});
+								body.properties.push({
+									name: 'pipeline',
+									value: pipelineId,
 								});
 							}
 							if (additionalFields.associatedCompany) {
@@ -2059,12 +2105,6 @@ export class Hubspot implements INodeType {
 									value: additionalFields.dealType as string,
 								});
 							}
-							if (additionalFields.pipeline) {
-								body.properties.push({
-									name: 'pipeline',
-									value: additionalFields.pipeline as string,
-								});
-							}
 							if (additionalFields.description) {
 								body.properties.push({
 									name: 'description',
@@ -2092,12 +2132,19 @@ export class Hubspot implements INodeType {
 							body.properties = [];
 							const updateFields = this.getNodeParameter('updateFields', i);
 							const dealId = this.getNodeParameter('dealId', i) as string;
-							if (updateFields.stage) {
+							const stage = this.getNodeParameter('stage', i) as string;
+							const pipelineId = this.getNodeParameter('pipelineId', i) as string;
+							if (pipelineId && stage) {
 								body.properties.push({
 									name: 'dealstage',
-									value: updateFields.stage as string,
+									value: stage,
+								});
+								body.properties.push({
+									name: 'pipeline',
+									value: pipelineId,
 								});
 							}
+
 							if (updateFields.dealName) {
 								body.properties.push({
 									name: 'dealname',
@@ -2122,12 +2169,7 @@ export class Hubspot implements INodeType {
 									value: updateFields.dealType as string,
 								});
 							}
-							if (updateFields.pipeline) {
-								body.properties.push({
-									name: 'pipeline',
-									value: updateFields.pipeline as string,
-								});
-							}
+
 							if (updateFields.description) {
 								body.properties.push({
 									name: 'description',
@@ -2719,12 +2761,187 @@ export class Hubspot implements INodeType {
 							}
 						}
 					}
+					if (resource === 'product') {
+						if (operation === 'upsert') {
+							const sku = this.getNodeParameter('sku', i) as string;
+							const nameproduct = this.getNodeParameter('name', i) as string;
+							const price = this.getNodeParameter('price', i) as string;
+							const additionalFields = this.getNodeParameter('additionalFields', i);
+							const body = {
+								hs_sku: sku,
+								name: nameproduct,
+								price,
+								description: additionalFields.descriptionProduct || '',
+							};
+							try {
+								const endpoint = '/crm/v3/objects/products';
+								responseData = await hubspotApiRequest.call(this, 'POST', endpoint, {
+									properties: body,
+								});
+							} catch (err) {
+								if (err.httpCode === '400' && err.description.includes('propertyName=hs_sku')) {
+									const endpoint = '/crm/v3/objects/products/search';
+
+									responseData = await hubspotApiRequest.call(this, 'POST', endpoint, {
+										filterGroups: [
+											{
+												filters: [
+													{
+														value: sku,
+														propertyName: 'hs_sku',
+														operator: 'EQ',
+													},
+												],
+											},
+										],
+									});
+									console.log(responseData);
+									if (responseData.total === 0) {
+										throw err;
+									} else {
+										const endpointUpdate = `/crm/v3/objects/products/${responseData.results[0].id}`;
+										responseData = await hubspotApiRequest.call(this, 'PATCH', endpointUpdate, {
+											properties: {
+												name: nameproduct,
+												price,
+												description: additionalFields.descriptionProduct || '',
+											},
+										});
+									}
+								} else {
+									throw err;
+								}
+							}
+						}
+
+						if (operation === 'get') {
+							const productId = this.getNodeParameter('productId', i) as string;
+							const endpoint = `/crm/v3/objects/products/${productId}`;
+							responseData = await hubspotApiRequest.call(this, 'GET', endpoint);
+						}
+						if (operation === 'getAll') {
+							const endpoint = '/crm/v3/objects/products';
+
+							qs.limit = this.getNodeParameter('limit', 0);
+							qs.archived = this.getNodeParameter('archived', 0);
+							responseData = await hubspotApiRequest.call(this, 'GET', endpoint, {}, qs);
+							responseData = responseData.results;
+						}
+						if (operation === 'delete') {
+							const productId = this.getNodeParameter('productId', i) as string;
+							const endpoint = `/crm/v3/objects/products/${productId}`;
+							responseData = await hubspotApiRequest.call(this, 'DELETE', endpoint);
+						}
+					}
+					if (resource === 'lineItems') {
+						if (operation === 'create' || operation === 'update') {
+							const nameLI = this.getNodeParameter('name', i) as string;
+							const quantity = this.getNodeParameter('quantity', i) as string;
+							const price = this.getNodeParameter('price', i) as string;
+							const hs_product_id = this.getNodeParameter('hs_product_id', i) as string;
+							const additionalFields = this.getNodeParameter('additionalFields', i);
+							const body = {
+								name: nameLI,
+								hs_product_id,
+								price,
+								quantity,
+								tax: additionalFields.tax || '',
+								discount_value: additionalFields.discount_value || '',
+							};
+							if (operation === 'create') {
+								const endpoint = '/crm/v3/objects/line_items';
+								responseData = await hubspotApiRequest.call(this, 'POST', endpoint, {
+									properties: body,
+								});
+							} else {
+								const idLineItem = this.getNodeParameter('idLineItem', i) as string;
+								const endpoint = `/crm/v3/objects/line_items/${idLineItem}`;
+								responseData = await hubspotApiRequest.call(this, 'PATCH', endpoint, {
+									properties: body,
+								});
+							}
+						}
+						if (operation === 'get') {
+							const lineItemId = this.getNodeParameter('lineItemId', i) as string;
+							const endpoint = `/crm/v3/objects/line_items/${lineItemId}`;
+							responseData = await hubspotApiRequest.call(this, 'GET', endpoint);
+						}
+						if (operation === 'getAll') {
+							const endpoint = '/crm/v3/objects/line_items';
+
+							qs.limit = this.getNodeParameter('limit', 0);
+							qs.archived = this.getNodeParameter('archived', 0);
+							responseData = await hubspotApiRequest.call(this, 'GET', endpoint, {}, qs);
+							responseData = responseData.results;
+						}
+						if (operation === 'delete') {
+							const lineItemId = this.getNodeParameter('lineItemId', i) as string;
+							const endpoint = `/crm/v3/objects/line_items/${lineItemId}`;
+							responseData = await hubspotApiRequest.call(this, 'DELETE', endpoint);
+						}
+					}
+					if (resource === 'association') {
+						const associationId = this.getNodeParameter('typeAssociation', i);
+						let fromObject = '',
+							toObject = '';
+						if (associationId === 1) (fromObject = 'contact'), (toObject = 'company');
+						if (associationId === 2) (fromObject = 'company'), (toObject = 'contact');
+						if (associationId === 3) (fromObject = 'deal'), (toObject = 'contact');
+						if (associationId === 4) (fromObject = 'contact'), (toObject = 'deal');
+						if (associationId === 5) (fromObject = 'deal'), (toObject = 'company');
+						if (associationId === 6) (fromObject = 'company'), (toObject = 'deal');
+						if (associationId === 7) (fromObject = 'company'), (toObject = 'engagement');
+						if (associationId === 8) (fromObject = 'engagement'), (toObject = 'company');
+						if (associationId === 9) (fromObject = 'contact'), (toObject = 'engagement');
+						if (associationId === 10) (fromObject = 'engagement'), (toObject = 'contact');
+						if (associationId === 11) (fromObject = 'deal'), (toObject = 'engagement');
+						if (associationId === 12) (fromObject = 'engagement'), (toObject = 'deal');
+						if (associationId === 15) (fromObject = 'contact'), (toObject = 'ticket');
+						if (associationId === 16) (fromObject = 'ticket'), (toObject = 'contact');
+						if (associationId === 17) (fromObject = 'ticket'), (toObject = 'engagement');
+						if (associationId === 18) (fromObject = 'engagement'), (toObject = 'ticket');
+						if (associationId === 19) (fromObject = 'deal'), (toObject = 'line_items');
+						if (associationId === 20) (fromObject = 'line_items'), (toObject = 'deal');
+						if (associationId === 25) (fromObject = 'company'), (toObject = 'ticket');
+						if (associationId === 26) (fromObject = 'ticket'), (toObject = 'company');
+						if (associationId === 27) (fromObject = 'deal'), (toObject = 'ticket');
+						if (associationId === 28) (fromObject = 'ticket'), (toObject = 'deal');
+
+						if (operation === 'get') {
+							const idFromAssociation = this.getNodeParameter('idFromAssociation', i) as string;
+							qs.limit = this.getNodeParameter('limit', 0);
+							const endpoint = `/crm/v4/objects/${fromObject}/${idFromAssociation}/associations/${toObject}`;
+							responseData = await hubspotApiRequest.call(this, 'GET', endpoint);
+						}
+
+						if (operation === 'create') {
+							const idFromAssociation = this.getNodeParameter('idFromAssociation', i) as string;
+							const idToAssociation = this.getNodeParameter('idToAssociation', i) as string;
+							const endpoint = `/crm/v4/objects/${fromObject}/${idFromAssociation}/associations/${toObject}/${idToAssociation}`;
+							const data = [
+								{
+									associationCategory: 'HUBSPOT_DEFINED',
+									associationTypeId: associationId,
+								},
+							];
+							responseData = await hubspotApiRequest.call(this, 'PUT', endpoint, data, qs);
+						}
+						if (operation === 'delete') {
+							const idFromAssociation = this.getNodeParameter('idFromAssociation', i) as string;
+							const idToAssociation = this.getNodeParameter('idToAssociation', i) as string;
+							const endpoint = `/crm/v4/objects/${fromObject}/${idFromAssociation}/associations/${toObject}/${idToAssociation}`;
+
+							responseData = await hubspotApiRequest.call(this, 'DELETE', endpoint);
+						}
+					}
 					const executionData = this.helpers.constructExecutionMetaData(
 						this.helpers.returnJsonArray(responseData),
 						{ itemData: { item: i } },
 					);
 					returnData.push(...executionData);
 				} catch (error) {
+					console.log('--- error ---');
+					console.log(error);
 					if (this.continueOnFail()) {
 						returnData.push({ json: { error: (error as JsonObject).message } });
 						continue;
